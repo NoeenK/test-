@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>REBUILT MatchCam</title>
+  <meta name="description" content="FRC 2026 REBUILT match recorder with a live HUB-shift timer for the drive team.">
+  <meta name="theme-color" content="#07090d">
+  <meta name="color-scheme" content="dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="MatchCam">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body class="layout-split">
+<div id="app">
+
+  <!-- ============ CAMERA PANE ============ -->
+  <section id="camPane" class="pane cam" aria-label="Camera">
+    <video id="preview" playsinline muted autoplay></video>
+
+    <div id="camEmpty" class="cam-empty">
+      <div class="cam-empty-inner">
+        <div class="logo-mark" aria-hidden="true"></div>
+        <h1>REBUILT MatchCam</h1>
+        <p>Record the whole match from behind the glass while the other half of the screen runs the HUB-shift timer for your driver.</p>
+        <button id="btnCam" class="btn primary big">Enable camera</button>
+        <button id="btnNoCam" class="btn ghost">Timer only (no recording)</button>
+        <p id="camErr" class="err" hidden></p>
+      </div>
+    </div>
+
+    <div class="cam-top">
+      <span id="recPill" class="rec-pill" hidden><i></i><b id="recTime">0:00</b></span>
+      <span id="camInfo" class="cam-info"></span>
+      <span class="spacer"></span>
+      <button id="btnLens" class="chip" hidden title="Switch lens">1×</button>
+    </div>
+
+    <div id="miniHud" class="mini-hud" aria-hidden="true">
+      <b id="miniClock">0:20</b><span id="miniPhase">READY</span><span id="miniHub" class="mini-hub">HUB</span>
+    </div>
+
+    <div id="zoomWrap" class="zoom" hidden>
+      <span id="zoomVal">1.0×</span>
+      <input id="zoom" type="range" min="1" max="5" step="0.1" value="1" aria-label="Zoom">
+    </div>
+
+    <!-- Scout tools slide over the camera; recording keeps running underneath -->
+    <div id="scout" class="scout" hidden>
+      <div class="scout-head">
+        <b>Scout</b>
+        <span id="scoutScore" class="scout-score"></span>
+        <button class="chip" data-close-scout>Camera</button>
+      </div>
+      <div class="scout-body">
+        <div class="fuel-card">
+          <div class="fuel-top">
+            <span class="lbl">ALLIANCE FUEL</span>
+            <span id="fuelHint" class="fuel-hint"></span>
+          </div>
+          <div class="fuel-count"><b id="fuelCount">0</b><small id="fuelWaste"></small></div>
+          <div class="fuel-btns">
+            <button class="btn fuel" data-fuel="1">+1</button>
+            <button class="btn fuel" data-fuel="3">+3</button>
+            <button class="btn fuel" data-fuel="5">+5</button>
+            <button class="btn fuel" data-fuel="10">+10</button>
+            <button class="btn ghost" data-fuel="undo">Undo</button>
+          </div>
+        </div>
+        <div class="tower-card">
+          <div class="lbl">AUTO TOWER L1 (15 pts, max 2)</div>
+          <div class="seg" id="autoTower">
+            <button data-v="0" class="on">0</button><button data-v="1">1</button><button data-v="2">2</button>
+          </div>
+          <div class="lbl">END GAME CLIMB</div>
+          <div id="climbs" class="climbs"></div>
+        </div>
+        <div class="tag-card">
+          <div class="lbl">TAG THIS MOMENT</div>
+          <div class="tags">
+            <button class="btn tag star" data-tag="Mark">★ Mark</button>
+            <button class="btn tag" data-tag="Great cycle">Great cycle</button>
+            <button class="btn tag" data-tag="Missed shots">Missed</button>
+            <button class="btn tag" data-tag="Defense">Defense</button>
+            <button class="btn tag" data-tag="Got defended">Defended</button>
+            <button class="btn tag" data-tag="Foul">Foul</button>
+            <button class="btn tag" data-tag="Jam / stuck">Stuck</button>
+            <button class="btn tag" data-tag="Brownout / dead">Dead</button>
+          </div>
+          <ol id="tagLog" class="tag-log"></ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CONTROLS ============ -->
+  <nav id="controls" class="controls" aria-label="Match controls">
+    <button id="btnRec" class="ctl rec" title="Record"><i></i><span>REC</span></button>
+    <div class="nudge">
+      <button id="btnMinus" class="ctl small" title="Clock is ahead of the field: −1 s">−1s</button>
+      <button id="btnPlus" class="ctl small" title="Clock is behind the field: +1 s">+1s</button>
+    </div>
+    <button id="btnMain" class="ctl main">START MATCH</button>
+    <button id="btnScout" class="ctl" title="Scout tools"><span class="lg">Scout</span><span class="sm" aria-hidden="true">✎</span></button>
+    <button id="btnLayout" class="ctl" title="Layout"><span class="lg">Layout</span><span class="sm" aria-hidden="true">◫</span></button>
+    <button id="btnMenu" class="ctl" title="Menu">☰</button>
+  </nav>
+
+  <!-- ============ DRIVER HUD PANE ============ -->
+  <section id="hudPane" class="pane hud" aria-label="Driver HUD" aria-live="polite">
+    <header class="hud-top">
+      <button id="hudMatch" class="hud-match">Practice 1</button>
+      <span id="hudTeam" class="hud-team"></span>
+      <span class="spacer"></span>
+      <button id="hudAlliance" class="alliance-chip red">RED</button>
+    </header>
+
+    <div class="hud-main">
+      <div class="hud-row">
+        <div id="hudPeriod" class="hud-period">READY</div>
+        <div id="hudPeriodLeft" class="hud-period-left"></div>
+      </div>
+      <div id="hudClock" class="hud-clock">0:20</div>
+
+      <div id="hudHub" class="hub-box idle">
+        <div class="hub-line">
+          <span class="hub-label">OUR HUB</span>
+          <span id="hubState" class="hub-state">READY</span>
+        </div>
+        <div id="hubNext" class="hub-next">Tap START at the AUTO buzzer</div>
+        <div class="hub-bar"><i id="hubBar"></i></div>
+      </div>
+
+      <div id="autoAsk" class="auto-ask" hidden>
+        <div class="ask-q">Who scored more FUEL in AUTO? <small>(DS game data)</small></div>
+        <div class="ask-btns">
+          <button class="btn ask red" data-win="red">RED</button>
+          <button class="btn ask blue" data-win="blue">BLUE</button>
+        </div>
+      </div>
+
+      <div id="timeline" class="timeline" aria-hidden="true"></div>
+      <div id="hudWindows" class="hud-windows"></div>
+
+      <div class="hud-foot">
+        <span id="oppHub" class="opp-hub"></span>
+        <span id="hudTip" class="hud-tip"></span>
+      </div>
+      <div id="hudNote" class="hud-note" hidden></div>
+      <div id="hudScore" class="hud-score" hidden></div>
+    </div>
+  </section>
+</div>
+
+<div id="flash" class="flash" aria-hidden="true"></div>
+<div id="toast" class="toast" role="status" hidden></div>
+
+<!-- ============ SHEETS ============ -->
+<div id="sheetMenu" class="sheet" hidden>
+  <div class="sheet-card narrow">
+    <header><h2>MatchCam</h2><button class="x" data-close>✕</button></header>
+    <div class="menu">
+      <button class="menu-item" data-open="sheetSetup"><b>Match setup</b><span>Match #, alliance, partners, driver note</span></button>
+      <button class="menu-item" data-open="sheetChecklist"><b>Pre-match checklist</b><span id="menuChecklist">0 / 0</span></button>
+      <button class="menu-item" data-open="sheetLibrary"><b>Match library</b><span id="menuLibrary">Recordings &amp; analysis</span></button>
+      <button class="menu-item" data-open="sheetPlan"><b>Shift cheat sheet</b><span>Who is live when, both scenarios</span></button>
+      <button class="menu-item" data-open="sheetHelp"><b>How to use at a match</b><span>Tripod setup, syncing, saving videos</span></button>
+      <button class="menu-item" id="btnHudWindow"><b>Open driver HUD window</b><span>Second Safari window, stays in sync</span></button>
+      <button class="menu-item" id="btnFullscreen"><b>Full screen</b><span>Hide browser bars where supported</span></button>
+      <button class="menu-item" data-open="sheetSettings"><b>Settings</b><span>Video, sounds, voice, RP thresholds</span></button>
+      <button class="menu-item" id="btnResetMatch"><b>Reset match clock</b><span>Back to READY</span></button>
+    </div>
+    <p class="fine">Add to Home Screen (Share → Add to Home Screen) for full-screen use and offline at events.</p>
+  </div>
+</div>
+
+<div id="sheetSetup" class="sheet" hidden>
+  <div class="sheet-card narrow">
+    <header><h2>Match setup</h2><button class="x" data-close>✕</button></header>
+    <form id="setupForm" class="form">
+      <div class="grid2">
+        <label>Match type
+          <select name="type">
+            <option value="P">Practice</option>
+            <option value="Q">Qualification</option>
+            <option value="SF">Playoff</option>
+            <option value="F">Final</option>
+            <option value="T">Test / drill</option>
+          </select>
+        </label>
+        <label>Number <input name="num" type="number" inputmode="numeric" min="1" max="999"></label>
+      </div>
+      <label>Our alliance</label>
+      <div class="seg wide" id="setupAlliance">
+        <button type="button" data-v="red" class="red">RED</button>
+        <button type="button" data-v="blue" class="blue">BLUE</button>
+      </div>
+      <div class="grid3">
+        <label>Our team <input name="team" inputmode="numeric" maxlength="5"></label>
+        <label>Partner <input name="p1" inputmode="numeric" maxlength="5"></label>
+        <label>Partner <input name="p2" inputmode="numeric" maxlength="5"></label>
+      </div>
+      <div class="grid3">
+        <label>Opponent <input name="o1" inputmode="numeric" maxlength="5"></label>
+        <label>Opponent <input name="o2" inputmode="numeric" maxlength="5"></label>
+        <label>Opponent <input name="o3" inputmode="numeric" maxlength="5"></label>
+      </div>
+      <label>Driver note (shown on the HUD)
+        <input name="note" maxlength="80" placeholder="e.g. Shoot S1, defend S2, climb L3 at 0:25">
+      </label>
+      <button class="btn primary big" type="submit">Save</button>
+    </form>
+  </div>
+</div>
+
+<div id="sheetChecklist" class="sheet" hidden>
+  <div class="sheet-card narrow">
+    <header><h2>Pre-match checklist</h2><button class="x" data-close>✕</button></header>
+    <ul id="checklist" class="checklist"></ul>
+    <div class="row-btns">
+      <button id="btnCheckReset" class="btn ghost">Uncheck all</button>
+      <button class="btn" data-open="sheetSettings">Edit items</button>
+    </div>
+  </div>
+</div>
+
+<div id="sheetPlan" class="sheet" hidden>
+  <div class="sheet-card">
+    <header><h2>REBUILT shift cheat sheet</h2><button class="x" data-close>✕</button></header>
+    <div id="planBody" class="plan"></div>
+  </div>
+</div>
+
+<div id="sheetSettings" class="sheet" hidden>
+  <div class="sheet-card narrow">
+    <header><h2>Settings</h2><button class="x" data-close>✕</button></header>
+    <form id="settingsForm" class="form">
+      <h3>Team &amp; event</h3>
+      <div class="grid2">
+        <label>Team number <input name="team" inputmode="numeric" maxlength="5"></label>
+        <label>Event code <input name="event" maxlength="16" placeholder="2026onto"></label>
+      </div>
+      <label>Event level (RP thresholds)
+        <select name="level">
+          <option value="regional">Regional / District — 100 / 360 / 50</option>
+          <option value="dcmp">District Champs — 240 / 360 / 50</option>
+          <option value="cmp">FIRST Championship — 360 / 500 / 50</option>
+        </select>
+      </label>
+
+      <h3>Video</h3>
+      <div class="grid2">
+        <label>Quality
+          <select name="quality">
+            <option value="720">720p (~45 MB/match)</option>
+            <option value="1080">1080p (~200 MB/match)</option>
+            <option value="2160">4K (~600 MB/match)</option>
+          </select>
+        </label>
+        <label>Frame rate
+          <select name="fps"><option value="30">30 fps</option><option value="60">60 fps</option></select>
+        </label>
+      </div>
+      <label class="toggle"><input type="checkbox" name="audio"> Record sound</label>
+      <label class="toggle"><input type="checkbox" name="autoRecord"> Start recording when the match starts</label>
+      <label class="toggle"><input type="checkbox" name="burnIn"> Burn the timer/HUB overlay into the video</label>
+      <label>Keep recording after 0:00 (s) <input name="postRoll" type="number" min="0" max="60" inputmode="numeric"></label>
+
+      <h3>Timer &amp; cues</h3>
+      <label>AUTO → TELEOP pause (s) <input name="pause" type="number" min="0" max="10" step="0.5" inputmode="decimal"></label>
+      <label class="toggle"><input type="checkbox" name="sounds"> Beeps (3-2-1 before every HUB change)</label>
+      <label class="toggle"><input type="checkbox" name="voice"> Voice callouts</label>
+      <div class="grid2">
+        <label>Spoken warning (s before change) <input name="lead" type="number" min="0" max="15" inputmode="numeric"></label>
+        <label>"Climb now" call at (s left, 0 = off) <input name="climbAt" type="number" min="0" max="29" inputmode="numeric"></label>
+      </div>
+      <label class="toggle"><input type="checkbox" name="keepAwake"> Keep screen awake</label>
+
+      <h3>Checklist items (one per line)</h3>
+      <textarea name="checklist" rows="6"></textarea>
+
+      <button class="btn primary big" type="submit">Save settings</button>
+      <div id="storageInfo" class="fine"></div>
+      <div class="row-btns">
+        <button type="button" id="btnTestCues" class="btn ghost">Test sounds</button>
+        <button type="button" id="btnExport" class="btn ghost">Export all data</button>
+      </div>
+      <p class="fine">Rules: 2026 Game Manual §6 + Team Update 22. AUTO 0:20 · TRANSITION 2:20–2:10 · SHIFTS 1–4 (25 s) · END GAME 0:30. The alliance with more AUTO FUEL has its HUB off in SHIFT 1 &amp; 3.</p>
+    </form>
+  </div>
+</div>
+
+<div id="sheetLibrary" class="sheet" hidden>
+  <div class="sheet-card">
+    <header><h2>Match library</h2><button class="x" data-close>✕</button></header>
+    <div id="libStats" class="lib-stats"></div>
+    <div id="libList" class="lib-list"></div>
+  </div>
+</div>
+
+<div id="sheetPlay" class="sheet" hidden>
+  <div class="sheet-card wide">
+    <header><h2 id="playTitle">Match</h2><button class="x" data-close>✕</button></header>
+    <div class="play-wrap">
+      <div class="player">
+        <video id="playVideo" playsinline controls></video>
+        <div id="playOverlay" class="play-overlay">
+          <b id="poClock">0:00</b><span id="poPeriod"></span><span id="poHub" class="mini-hub"></span>
+        </div>
+        <div id="playNoVideo" class="no-video" hidden>No video for this match (timer-only)</div>
+      </div>
+      <div id="playTimeline" class="play-timeline"></div>
+      <div id="playJumps" class="jumps"></div>
+      <div class="row-btns">
+        <button id="btnSpeed" class="btn ghost">1×</button>
+        <button id="btnOverlay" class="btn ghost">Overlay on</button>
+        <button id="btnShare" class="btn primary">Save to Photos / Share</button>
+        <button id="btnDownload" class="btn ghost">Download</button>
+        <button id="btnDelete" class="btn danger">Delete</button>
+      </div>
+      <div id="playSummary" class="summary"></div>
+      <label class="notes">Notes <textarea id="playNotes" rows="3" placeholder="What happened, what to fix…"></textarea></label>
+    </div>
+  </div>
+</div>
+
+<div id="sheetPost" class="sheet" hidden>
+  <div class="sheet-card narrow">
+    <header><h2>Match complete</h2><button class="x" data-close>✕</button></header>
+    <div id="postSummary" class="summary"></div>
+    <form id="postForm" class="form">
+      <label>Result</label>
+      <div class="seg wide" id="postResult">
+        <button type="button" data-v="W">WIN</button>
+        <button type="button" data-v="T">TIE</button>
+        <button type="button" data-v="L">LOSS</button>
+      </div>
+      <div class="grid2">
+        <label>Red score <input name="red" type="number" inputmode="numeric"></label>
+        <label>Blue score <input name="blue" type="number" inputmode="numeric"></label>
+      </div>
+      <label>Notes <textarea name="notes" rows="3" placeholder="Robot issues, strategy, what to fix…"></textarea></label>
+      <button class="btn primary big" type="submit">Save &amp; next match</button>
+    </form>
+  </div>
+</div>
+
+<div id="sheetHelp" class="sheet" hidden>
+  <div class="sheet-card narrow">
+    <header><h2>How to use at a match</h2><button class="x" data-close>✕</button></header>
+    <ol class="guide">
+      <li><b>Install it.</b> Safari → Share → <i>Add to Home Screen</i>. It then opens full screen, works offline at the venue and keeps its storage.</li>
+      <li><b>Mount the iPhone Duo unfolded</b> on the tripod behind the glass, rear camera on the field, inner screen facing the drive team. The camera sits on one half of the fold, the driver HUD on the other (<i>Layout</i> swaps sides or goes full-screen HUD).</li>
+      <li><b>Before the match:</b> Match setup (number, alliance, partners, driver note), run the checklist, use the 0.5× lens / zoom to frame the whole field.</li>
+      <li><b>Tap START MATCH on the AUTO start sound.</b> Recording starts automatically. Use −1s / +1s if the field clock is off.</li>
+      <li><b>Tap TELEOP GO</b> when TELEOP starts (or let it auto-start after the pause), then tap who scored more FUEL in AUTO. The Driver Station game data shows it: R or B = that alliance's hub goes OFF first.</li>
+      <li><b>Listen.</b> 3-2-1 beeps before every change of <i>our</i> hub, voice callouts for each shift, END GAME and the climb call.</li>
+      <li><b>Optional scouting:</b> Scout opens over the camera (recording continues): tap FUEL, AUTO tower, climbs, and tag moments to jump to later.</li>
+      <li><b>After 0:00</b> it keeps recording a few seconds, saves, and asks for the result. Library → Save to Photos to keep the video.</li>
+    </ol>
+    <p class="fine">Long-press the hub box to clear a wrong AUTO winner. Menu → Open driver HUD window opens a second synced view.</p>
+  </div>
+</div>
+
+<div id="sheetRecover" class="sheet" hidden>
+  <div class="sheet-card narrow">
+    <header><h2>Recovered recording</h2><button class="x" data-close>✕</button></header>
+    <p id="recoverText">A recording was interrupted. It has been rebuilt from saved chunks.</p>
+    <div class="row-btns"><button class="btn primary" data-open="sheetLibrary">Open library</button></div>
+  </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
